@@ -1,6 +1,6 @@
-# 🛒 NearMart
+# 🛒 Hyperlocal Grocery Marketplace
 
-A hyperlocal grocery marketplace connecting local shop owners with nearby customers.
+A mobile-first platform connecting local grocery shop owners with nearby customers.
 
 ## What this is
 Local shops can list their inventory and receive orders. Customers discover nearby stores and order through the app. The platform earns a commission on each transaction.
