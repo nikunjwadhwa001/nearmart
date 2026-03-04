@@ -4,7 +4,7 @@
 create table public.users (
   id uuid primary key default gen_random_uuid(),
   full_name varchar(100) not null,
-  phone varchar(15) unique not null,
+  phone varchar(15) unique,
   email varchar(100) unique,
   role varchar(20) not null check (role in ('customer', 'owner', 'admin')),
   is_active boolean default true,
