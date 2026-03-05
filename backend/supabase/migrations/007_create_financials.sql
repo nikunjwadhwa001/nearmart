@@ -17,7 +17,7 @@ create table public.platform_config (
 
 -- Default commission rate of 10%
 insert into public.platform_config (key, value)
-values ('commission_rate', '10.00');
+values ('commission_rate', '5.00');
 
 create index idx_commission_shop on public.commission_ledger(shop_id);
 create index idx_commission_status on public.commission_ledger(status);
