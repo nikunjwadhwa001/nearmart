@@ -13,9 +13,9 @@ Local shops can list their inventory and receive orders. Customers discover near
 ## Tech Stack
 | Layer | Technology |
 |---|---|
-| Mobile App | Flutter (Dart) |
+| Customer Mobile App | Flutter (Dart) |
+| Shop Owner + Admin Dashboard | React + Vite + Tailwind CSS |
 | Backend | Supabase (PostgreSQL + Auth + Realtime) |
-| Admin Dashboard | React + Vite + Tailwind CSS |
 | Deployment | Vercel (dashboard) + Supabase (backend) |
 
 ## Project Structure
