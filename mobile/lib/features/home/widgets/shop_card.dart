@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../../core/theme/app_theme.dart';
@@ -34,7 +35,11 @@ class ShopCard extends StatelessWidget {
           // InkWell adds ripple effect on tap
           borderRadius: BorderRadius.circular(16),
           onTap: () {
-            // Navigate to shop detail — we'll build this next
+            // context.push adds shop detail on top of home screen
+            // back button will return customer to home
+            // state.extra passes the full Shop object to the detail screen
+            // so we don't need to fetch it again
+            context.push('/shop/${shop.id}', extra: shop);
           },
           child: Padding(
             padding: const EdgeInsets.all(12),
