@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../profile/providers/user_provider.dart';
 
 class HomeHeader extends ConsumerWidget {
   const HomeHeader({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Get current user from Supabase auth
-    final user = Supabase.instance.client.auth.currentUser;
+    // Get current user profile from database
+    final userProfile = ref.watch(userProfileProvider);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -46,23 +47,43 @@ class HomeHeader extends ConsumerWidget {
                         ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    // Show email before @ symbol as name
-                    // user?.email is null-safe — won't crash if null
-                    user?.email?.split('@')[0] ?? 'there',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
+                  // Show user's full name or fallback to 'there' if loading/error
+                  userProfile.when(
+                    data: (user) => Text(
+                      user?.fullName ?? 'there',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
+                    ),
+                    loading: () => Text(
+                      'Loading...',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
+                    ),
+                    error: (_, __) => Text(
+                      'there',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
+                    ),
                   ),
                 ],
               ),
               // Profile avatar
-              CircleAvatar(
-                backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                child: const  Icon(
-                  Icons.person_outline,
-                  color: AppTheme.primary,
+              GestureDetector(
+                // GestureDetector detects taps, swipes, long presses etc
+                // onTap runs when user taps anywhere inside it
+                onTap: () => context.go('/profile'),
+                child: CircleAvatar(
+                  backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                  child: const Icon(
+                    Icons.person_outline,
+                    color: AppTheme.primary,
+                  ),
                 ),
               ),
             ],

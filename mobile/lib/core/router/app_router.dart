@@ -6,6 +6,7 @@ import '../../features/auth/screens/splash_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
 import '../../features/home/screens/home_screen.dart';
+import '../../features/profile/screens/profile_screen.dart';
 
 // Routes as constants — no magic strings anywhere
 class AppRoutes {
@@ -13,6 +14,7 @@ class AppRoutes {
   static const login = '/login';
   static const otp = '/otp';
   static const home = '/home';
+  static const profile = '/profile';
 }
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -21,10 +23,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final session = Supabase.instance.client.auth.currentSession;
       final isLoggedIn = session != null;
+      final currentPath = state.matchedLocation;
+
+      // Never redirect away from OTP screen — user needs to verify the code
+      if (currentPath == AppRoutes.otp) return null;
+
       final isOnAuthScreen =
-          state.matchedLocation == AppRoutes.login ||
-          state.matchedLocation == AppRoutes.otp ||
-          state.matchedLocation == AppRoutes.splash;
+          currentPath == AppRoutes.login ||
+          currentPath == AppRoutes.splash;
 
       // If logged in and trying to access auth screens, go home
       if (isLoggedIn && isOnAuthScreen) return AppRoutes.home;
@@ -45,13 +51,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.otp,
-        builder: (context, state) => OtpScreen(
-          email: state.extra as String,
-        ),
+        builder: (context, state) {
+          // Extract email and name from extra parameter
+          final extra = state.extra;
+          final email = extra is Map ? (extra['email'] as String? ?? '') : (extra as String? ?? '');
+          final name = extra is Map ? (extra['name'] as String? ?? '') : '';
+          return OtpScreen(email: email, name: name);
+        },
       ),
       GoRoute(
         path: AppRoutes.home,
         builder: (context, state) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.profile,
+        builder: (context, state) => const ProfileScreen(),
       ),
     ],
   );
