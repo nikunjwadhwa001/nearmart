@@ -27,4 +27,4 @@ final shopInventoryProvider =
   // Fetch and return inventory for this specific shop
   // Riverpod automatically handles loading/error/data states
   return repository.getShopInventory(shopId);
-});
+}); 
