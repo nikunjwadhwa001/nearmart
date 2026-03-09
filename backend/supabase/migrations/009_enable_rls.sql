@@ -38,6 +38,11 @@ create policy "users_insert_own"
 on public.users for insert
 with check (auth.uid() = id);
 
+create policy "Users can delete own account"
+on public.users
+for delete
+using (auth.uid() = id);
+
 -- =========================================
 -- STEP 3: ADDRESSES table policies
 -- =========================================
