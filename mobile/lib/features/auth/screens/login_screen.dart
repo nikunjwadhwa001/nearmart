@@ -12,11 +12,13 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
     super.dispose();
   }
@@ -28,7 +30,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // Listen for OTP sent — navigate to OTP screen
     ref.listen<AuthState>(authNotifierProvider, (previous, next) {
       if (next.otpSent && !(previous?.otpSent ?? false)) {
-        context.go('/otp', extra: _emailController.text.trim());
+        context.go('/otp', extra: {
+          'email': _emailController.text.trim(),
+          'name': _nameController.text.trim(),
+        });
       }
     });
 
@@ -96,13 +101,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Enter your email to get started',
+                  'Enter your details to get started',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: AppTheme.textSecondary,
                       ),
                 ),
 
                 const SizedBox(height: 32),
+
+                // Name field
+                TextFormField(
+                  controller: _nameController,
+                  textCapitalization: TextCapitalization.words,
+                  autocorrect: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    hintText: 'John Doe',
+                    helperText: 'Required for new accounts only',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                  validator: (value) {
+                    // Name is optional - only validate if user entered something
+                    if (value != null && value.trim().isNotEmpty) {
+                      if (value.trim().length < 2) {
+                        return 'Name must be at least 2 characters';
+                      }
+                    }
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 16),
 
                 // Email field
                 TextFormField(
@@ -161,7 +190,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           if (_formKey.currentState!.validate()) {
                             await ref
                                 .read(authNotifierProvider.notifier)
-                                .sendOtp(_emailController.text.trim());
+                                .sendOtp(
+                                  _emailController.text.trim(),
+                                  _nameController.text.trim(),
+                                );
                           }
                         },
                   child: authState.isLoading

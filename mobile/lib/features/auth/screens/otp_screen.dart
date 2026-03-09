@@ -1,61 +1,78 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
+import '../../profile/providers/user_provider.dart';
 
 class OtpScreen extends ConsumerStatefulWidget {
   final String email;
-  const OtpScreen({super.key, required this.email});
+  final String name;
+  const OtpScreen({super.key, required this.email, required this.name});
 
   @override
   ConsumerState<OtpScreen> createState() => _OtpScreenState();
 }
 
 class _OtpScreenState extends ConsumerState<OtpScreen> {
-  final List<TextEditingController> _controllers =
-      List.generate(6, (_) => TextEditingController());
-  final List<FocusNode> _focusNodes =
-      List.generate(6, (_) => FocusNode());
+  // Single controller and focus node — one hidden TextField drives everything
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+  bool _isVerifying = false;
+  String? _error;
 
   @override
   void dispose() {
-    for (final c in _controllers) {
-      c.dispose();
-    }
-    for (final f in _focusNodes) {
-      f.dispose();
-    }
+    _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
-  String get _otp =>
-      _controllers.map((c) => c.text).join();
-
-  void _onDigitEntered(int index, String value) {
-    if (value.isNotEmpty && index < 5) {
-      _focusNodes[index + 1].requestFocus();
-    }
-    // Auto-submit when all 6 digits entered
-    if (_otp.length == 6) {
-      _verifyOtp();
-    }
-  }
-
   Future<void> _verifyOtp() async {
-    if (_otp.length != 6) return;
-    final success = await ref
+    final otp = _controller.text;
+    if (otp.length != 6) return;
+
+    setState(() {
+      _isVerifying = true;
+      _error = null;
+    });
+
+    // Hide keyboard
+    _focusNode.unfocus();
+
+    final error = await ref
         .read(authNotifierProvider.notifier)
-        .verifyOtp(widget.email, _otp);
-    if (success && mounted) {
+        .verifyOtp(widget.email, otp, widget.name);
+
+    if (!mounted) return;
+
+    if (error == null) {
+      ref.invalidate(userProfileProvider);
       context.go('/home');
+    } else {
+      // Map technical errors to user-friendly messages
+      String friendlyError;
+      if (error.toLowerCase().contains('expired') ||
+          error.toLowerCase().contains('invalid')) {
+        friendlyError = 'This code has expired or is incorrect. Please tap "Resend OTP" to get a new code.';
+      } else if (error.toLowerCase().contains('network') ||
+          error.toLowerCase().contains('connection')) {
+        friendlyError = 'Please check your internet connection and try again.';
+      } else {
+        friendlyError = 'Something went wrong. Please try again or request a new code.';
+      }
+      setState(() {
+        _isVerifying = false;
+        _error = friendlyError;
+      });
+      // Re-focus so user can retry
+      _focusNode.requestFocus();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authNotifierProvider);
-
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
@@ -66,7 +83,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -93,54 +110,87 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
               const SizedBox(height: 40),
 
-              // OTP input boxes
-              Row(
-  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-  children: List.generate(6, (index) {
-    return SizedBox(
-      width: 48,
-      height: 56,
-      child: TextFormField(
-        controller: _controllers[index],
-        focusNode: _focusNodes[index],
-        keyboardType: TextInputType.number,
-        textAlign: TextAlign.center,
-        textAlignVertical: TextAlignVertical.center,
-        maxLength: 1,
-        style: const TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.bold,
-          height: 1,
-        ),
-        decoration: InputDecoration(
-          counterText: '',
-          filled: true,
-          fillColor: AppTheme.surface,
-          contentPadding: EdgeInsets.zero,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade200),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade200),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
-                color: AppTheme.primary, width: 2),
-          ),
-        ),
-        onChanged: (value) => _onDigitEntered(index, value),
-      ),
-    );
-  }),
-),
+              // OTP input — single hidden TextField with visual digit boxes
+              GestureDetector(
+                onTap: () => _focusNode.requestFocus(),
+                child: Stack(
+                  children: [
+                    // Hidden real TextField that captures all keyboard input
+                    Opacity(
+                      opacity: 0,
+                      child: SizedBox(
+                        height: 56,
+                        child: TextField(
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          autofocus: true,
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
+                          readOnly: _isVerifying,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(6),
+                          ],
+                          decoration: const InputDecoration(
+                            counterText: '',
+                            border: InputBorder.none,
+                          ),
+                          onChanged: (value) {
+                            // Rebuild the visual boxes
+                            setState(() {});
+                            // Auto-submit when 6 digits entered
+                            if (value.length == 6 && !_isVerifying) {
+                              _verifyOtp();
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+
+                    // Visual digit boxes drawn on top
+                    IgnorePointer(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: List.generate(6, (index) {
+                          final text = _controller.text;
+                          final hasDigit = index < text.length;
+                          final isActive = index == text.length;
+
+                          return Container(
+                            width: 48,
+                            height: 56,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: AppTheme.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isActive
+                                    ? AppTheme.primary
+                                    : hasDigit
+                                        ? AppTheme.primary.withValues(alpha: 0.5)
+                                        : Colors.grey.shade200,
+                                width: isActive ? 2 : 1,
+                              ),
+                            ),
+                            child: Text(
+                              hasDigit ? text[index] : '',
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
               const SizedBox(height: 24),
 
               // Error
-              if (authState.error != null)
+              if (_error != null)
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -154,7 +204,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          authState.error!,
+                          _error!,
                           style: const TextStyle(
                               color: AppTheme.error, fontSize: 13),
                         ),
@@ -163,12 +213,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                   ),
                 ),
 
-              if (authState.error != null) const SizedBox(height: 16),
+              if (_error != null) const SizedBox(height: 16),
 
               // Verify button
               ElevatedButton(
-                onPressed: authState.isLoading ? null : _verifyOtp,
-                child: authState.isLoading
+                onPressed: _isVerifying ? null : _verifyOtp,
+                child: _isVerifying
                     ? const SizedBox(
                         height: 20,
                         width: 20,
@@ -185,12 +235,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               // Resend
               Center(
                 child: TextButton(
-                  onPressed: authState.isLoading
+                  onPressed: _isVerifying
                       ? null
                       : () {
                           ref
                               .read(authNotifierProvider.notifier)
-                              .sendOtp(widget.email);
+                              .sendOtp(widget.email, widget.name);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content:  Text('OTP resent!'),
