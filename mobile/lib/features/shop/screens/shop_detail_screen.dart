@@ -64,7 +64,7 @@ class ShopDetailScreen extends ConsumerWidget {
                     size: 64,
                     // withOpacity — makes icon semi-transparent
                     // so it feels like a watermark, not a focal point
-                    color: Colors.white.withOpacity(0.3),
+                    color: Colors.white.withValues(alpha : 0.3),
                   ),
                 ),
               ),

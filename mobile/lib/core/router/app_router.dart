@@ -8,6 +8,7 @@ import '../../features/home/screens/home_screen.dart';
 import '../../features/shop/screens/shop_detail_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../models/shop.dart';
+import '../../features/cart/screens/cart_screen.dart';
 
 // All route paths as constants
 // Never type '/login' as a raw string anywhere else in the app
@@ -72,6 +73,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.home,
         builder: (context, state) => const HomeScreen(),
       ),
+      GoRoute(
+  path: AppRoutes.cart,
+  builder: (context, state) => const CartScreen(),
+),
       GoRoute(
         path: '/shop/:shopId',
         builder: (context, state) {

@@ -77,7 +77,7 @@ class HomeHeader extends ConsumerWidget {
               GestureDetector(
                 // GestureDetector detects taps, swipes, long presses etc
                 // onTap runs when user taps anywhere inside it
-                onTap: () => context.go('/profile'),
+                onTap: () => context.push('/profile'),
                 child: CircleAvatar(
                   backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
                   child: const Icon(
