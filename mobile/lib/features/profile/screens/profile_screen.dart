@@ -105,6 +105,13 @@ class ProfileScreen extends ConsumerWidget {
         const _SectionTitle(title: 'Account'),
 
         _ProfileTile(
+          icon: Icons.edit_outlined,
+          label: 'Edit Profile',
+          color: AppTheme.textPrimary,
+          onTap: () => _showEditNameDialog(context, ref, userProfile),
+        ),
+
+        _ProfileTile(
           icon: Icons.logout_rounded,
           label: 'Log Out',
           color: AppTheme.textPrimary,
@@ -125,6 +132,89 @@ class ProfileScreen extends ConsumerWidget {
 
         const SizedBox(height: 32),
       ],
+    );
+  }
+
+  // EDIT NAME DIALOG
+  // Let user update their full name
+  void _showEditNameDialog(BuildContext context, WidgetRef ref, User? userProfile) {
+    final nameController = TextEditingController(text: userProfile?.fullName ?? '');
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text('Edit Profile'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: nameController,
+            textCapitalization: TextCapitalization.words,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Full Name',
+              hintText: 'Enter your name',
+              prefixIcon: Icon(Icons.person_outline),
+            ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter your name';
+              }
+              if (value.trim().length < 2) {
+                return 'Name must be at least 2 characters';
+              }
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                try {
+                  // Update name in database
+                  await ref
+                      .read(userUpdateProvider)
+                      .updateFullName(nameController.text.trim());
+                  
+                  // Close dialog
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext);
+                  }
+                  
+                  // Show success message
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Profile updated successfully'),
+                        backgroundColor: AppTheme.primary,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  // Show error
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error updating profile: $e'),
+                        backgroundColor: AppTheme.error,
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
     );
   }
 

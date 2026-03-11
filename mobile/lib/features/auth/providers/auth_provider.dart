@@ -40,7 +40,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, error: null, otpSent: false);
 
     try {
-      // Send OTP with user metadata so trigger can create user with proper name
+      // Send OTP with user metadata for later use in _ensureUserInDatabase
       await _supabase.auth.signInWithOtp(
         email: email,
         shouldCreateUser: true,
@@ -73,8 +73,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
 
       if (response.session != null) {
-        // User is now logged in — ensure they exist in public.users
-        // The trigger may have created them, or they may have been deleted previously
+        // User is now logged in — create/update their public.users row
+        // This is the ONLY place users get created (no database trigger)
         await _ensureUserInDatabase(
           userId: response.user!.id,
           email: email,
@@ -102,14 +102,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  // Ensure user has a row in public.users with correct name
+  // Create or update user in public.users after verified login
+  // This runs ONLY after successful OTP verification — no ghost users
   Future<void> _ensureUserInDatabase({
     required String userId,
     required String email,
     required String fullName,
   }) async {
     try {
-      // Check if user exists in public.users
+      // Check if user already exists (returning user)
       final existing = await _supabase
           .from('users')
           .select('id, full_name')
@@ -117,8 +118,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           .maybeSingle();
 
       if (existing == null) {
-        // User doesn't exist — create them
-        // This happens if trigger failed or user was previously deleted
+        // New verified user — create their profile
         await _supabase.from('users').insert({
           'id': userId,
           'email': email,

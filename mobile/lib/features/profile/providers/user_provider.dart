@@ -25,3 +25,35 @@ final userProfileProvider = FutureProvider<User?>((ref) async {
     return null;
   }
 });
+
+// Provider to update user profile
+final userUpdateProvider = Provider<UserUpdate>((ref) {
+  return UserUpdate(ref);
+});
+
+class UserUpdate {
+  final Ref ref;
+  UserUpdate(this.ref);
+
+  final _supabase = Supabase.instance.client;
+
+  // Update user's full name in both public.users and auth.users
+  Future<void> updateFullName(String newName) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) throw Exception('Not logged in');
+
+    // Update public.users (our app table)
+    await _supabase
+        .from('users')
+        .update({'full_name': newName})
+        .eq('id', userId);
+
+    // Update auth.users metadata (Supabase auth table)
+    await _supabase.auth.updateUser(
+      UserAttributes(data: {'full_name': newName}),
+    );
+
+    // Refresh the profile provider to show updated data
+    ref.invalidate(userProfileProvider);
+  }
+}
