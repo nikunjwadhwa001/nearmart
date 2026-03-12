@@ -1,17 +1,31 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/product.dart';
+import '../../../core/cache/query_cache.dart';
 
 class ShopInventoryRepository {
   // Get the Supabase client — our connection to the database
   final _supabase = Supabase.instance.client;
+  // Shared cache utility reused across repository calls.
+  final _cache = QueryCache.instance;
 
   Future<Map<String, List<Product>>> getShopInventory(String shopId) async {
-    // Call the SQL function we created in Supabase
-    // rpc = Remote Procedure Call — calls a function in the database
-    // instead of directly querying a table
-    final response = await _supabase.rpc(
-      'get_shop_inventory',
-      params: {'shop_id_input': shopId},
+    final userId = _supabase.auth.currentUser?.id ?? 'anon';
+    // Per-shop key keeps inventories isolated and safe across accounts.
+    final key = 'shop_inventory:v1:user:$userId:shop:$shopId';
+
+    final response = await _cache.getOrFetch<List<dynamic>>(
+      key: key,
+      // Inventory changes relatively often; keep TTL shorter than nearby shops.
+      ttl: const Duration(minutes: 2),
+      fetcher: () async {
+        final result = await _supabase.rpc(
+          'get_shop_inventory',
+          params: {'shop_id_input': shopId},
+        );
+        return (result as List).cast<dynamic>();
+      },
+      decode: (raw) => (raw as List).cast<dynamic>(),
+      encode: (value) => value,
     );
 
     // response is a flat list of rows like this:
@@ -24,13 +38,14 @@ class ShopInventoryRepository {
     // Map<productId, List of rows belonging to that product>
     final Map<String, List<Map<String, dynamic>>> productRows = {};
 
-    for (final row in response as List) {
-      final productId = row['product_id'] as String;
+    for (final row in response) {
+      final rowMap = Map<String, dynamic>.from(row as Map);
+      final productId = rowMap['product_id'] as String;
       // putIfAbsent — if key doesn't exist, create empty list
       // if key exists, do nothing — just return existing list
       productRows.putIfAbsent(productId, () => []);
       // Add this row to that product's list
-      productRows[productId]!.add(row);
+      productRows[productId]!.add(rowMap);
     }
 
     // Step 2 — Convert each group into a Product object with its variants

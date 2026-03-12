@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/cart_item.dart';
+import '../../address/widgets/address_selection_sheet.dart';
+import '../../orders/repository/order_repository.dart';
 import '../providers/cart_provider.dart';
 
 class CartScreen extends ConsumerWidget {
@@ -30,36 +32,66 @@ class CartScreen extends ConsumerWidget {
       body: cartItems.isEmpty
           // EMPTY STATE — cart has nothing in it
           ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.shopping_cart_outlined,
-                    size: 80,
-                    color: Colors.grey.shade300,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Your cart is empty',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Add items from a nearby store',
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 13,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.shopping_cart_outlined,
+                        size: 48,
+                        color: AppTheme.primary.withValues(alpha: 0.4),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    // Go back to home to browse shops
-                    onPressed: () => context.go('/home'),
-                    child: const Text('Browse Stores'),
-                  ),
-                ],
+                    const SizedBox(height: 24),
+                    Text(
+                      'Your cart is empty',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Looks like you haven\'t added\nanything yet',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 14,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => context.go('/home'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Browse Stores',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             )
 
@@ -238,6 +270,59 @@ class _OrderSummary extends ConsumerWidget {
     required this.total,
   });
 
+  Future<void> _placeOrder(BuildContext context, WidgetRef ref) async {
+    final cartItems = ref.read(cartProvider);
+    if (cartItems.isEmpty) return;
+
+    // Step 1 — Select delivery address
+    final address = await showAddressSelectionSheet(context, ref);
+    if (address == null) return; // User cancelled
+
+    // All items are from the same shop
+    final shopId = cartItems.first.shopId;
+
+    // Show loading
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final repo = OrderRepository();
+      final orderId = await repo.placeOrder(
+        shopId: shopId,
+        items: cartItems,
+        deliveryAddressId: address.id,
+      );
+
+      // Clear cart after successful order
+      ref.read(cartProvider.notifier).clearCart();
+
+      // Close loading dialog
+      if (context.mounted) Navigator.pop(context);
+
+      // Navigate to order confirmation
+      if (context.mounted) {
+        context.go('/order-confirmation/$orderId');
+      }
+    } catch (e) {
+      // Close loading dialog
+      if (context.mounted) Navigator.pop(context);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to place order. Please check your connection and try again.'),
+            backgroundColor: AppTheme.error,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
@@ -267,9 +352,7 @@ class _OrderSummary extends ConsumerWidget {
           const SizedBox(height: 16),
 
           ElevatedButton(
-            onPressed: () {
-              // Order placement logic — coming next
-            },
+            onPressed: () => _placeOrder(context, ref),
             child: const Text('Place Order'),
           ),
         ],

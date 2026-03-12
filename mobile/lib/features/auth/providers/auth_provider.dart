@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/cache/query_cache.dart';
 
 // Auth state — what the UI needs to know
 class AuthState {
@@ -152,6 +153,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
 // The router redirect detects this and sends user to /login
 Future<void> signOut() async {
   await _supabase.auth.signOut();
+  // Drop all cached API data so next login starts with clean user-scoped state.
+  await QueryCache.instance.clearAll();
   state = const AuthState(); // Reset all state
 }
 
@@ -192,6 +195,8 @@ Future<void> deleteAccount(BuildContext context) async {
 
     // Sign out locally
     await _supabase.auth.signOut();
+    // Account is gone; clear cached data to avoid stale reads on reused device.
+    await QueryCache.instance.clearAll();
 
     state = state.copyWith(isLoading: false);
 

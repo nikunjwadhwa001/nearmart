@@ -7,8 +7,12 @@ import '../../features/auth/screens/otp_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/shop/screens/shop_detail_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
+import '../../features/orders/screens/order_confirmation_screen.dart';
+import '../../features/orders/screens/order_history_screen.dart';
+import '../../features/orders/screens/order_detail_screen.dart';
 import '../../models/shop.dart';
 import '../../features/cart/screens/cart_screen.dart';
+import '../../features/search/screens/search_screen.dart';
 
 // All route paths as constants
 // Never type '/login' as a raw string anywhere else in the app
@@ -21,6 +25,8 @@ class AppRoutes {
   static const shopDetail = '/shop';
   static const profile = '/profile';
   static const cart = '/cart';
+  static const orders = '/orders';
+  static const search = '/search';
 }
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -89,6 +95,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.profile,
         builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/order-confirmation/:orderId',
+        builder: (context, state) {
+          final orderId = state.pathParameters['orderId']!;
+          return OrderConfirmationScreen(orderId: orderId);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.orders,
+        builder: (context, state) => const OrderHistoryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.search,
+        builder: (context, state) => const SearchScreen(),
+      ),
+      GoRoute(
+        path: '/order/:orderId',
+        builder: (context, state) {
+          final orderId = state.pathParameters['orderId']!;
+          return OrderDetailScreen(orderId: orderId);
+        },
       ),
     ],
   );

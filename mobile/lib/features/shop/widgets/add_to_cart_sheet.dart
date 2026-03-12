@@ -8,11 +8,13 @@ import '../../cart/providers/cart_provider.dart';
 class AddToCartSheet extends ConsumerStatefulWidget {
   final Product product;
   final String shopId;
+  final String shopName;
 
   const AddToCartSheet({
     super.key,
     required this.product,
     required this.shopId,
+    required this.shopName,
   });
 
   @override
@@ -183,7 +185,9 @@ class _AddToCartSheetState extends ConsumerState<AddToCartSheet> {
                         final item = CartItem(
                           variantId: _selectedVariant.id,
                           shopId: widget.shopId,
+                          shopName: widget.shopName,
                           productName: widget.product.name,
+                          brandName: widget.product.brandName ?? '',
                           variantName: _selectedVariant.variantName,
                           price: _selectedVariant.price,
                           quantity: _quantity,

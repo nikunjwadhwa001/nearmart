@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/shop_provider.dart';
 import '../widgets/shop_card.dart';
 import '../widgets/home_header.dart';
+import '../../cart/providers/cart_provider.dart';
 
 // ConsumerStatefulWidget because we need:
 // - State (StatefulWidget) for location loading on init
@@ -69,6 +71,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     // Watch nearby shops — automatically shows loading/error/data
     final shopsAsync = ref.watch(nearbyShopsProvider);
+    final cartCount = ref.watch(cartItemCountProvider);
+    final cartTotal = ref.watch(cartTotalProvider);
+    final shopName = ref.watch(cartShopNameProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -128,27 +133,67 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ),
 
-                // ERROR STATE — show error message
+                // ERROR STATE — friendly network/generic error
                 error: (error, stack) => SliverToBoxAdapter(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        children: [
-                          const Icon(Icons.error_outline,
-                              size: 48, color: AppTheme.error),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Could not load nearby shops',
-                            style: TextStyle(color: AppTheme.textSecondary),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: AppTheme.error.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
                           ),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
+                          child: Icon(
+                            Icons.wifi_off_rounded,
+                            size: 36,
+                            color: AppTheme.error.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Unable to load stores',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Please check your internet connection\nand try again',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
                             onPressed: _getLocation,
-                            child: const Text('Try Again'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Try Again',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -200,14 +245,121 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 },
               ),
 
-              // Bottom padding
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 24),
+              // Bottom padding so last item isn't hidden behind cart bar
+              SliverToBoxAdapter(
+                child: SizedBox(height: cartCount > 0 ? 80 : 24),
               ),
             ],
           ),
         ),
       ),
+      // Floating cart bar — only visible when cart has items
+      bottomNavigationBar: cartCount > 0
+          ? GestureDetector(
+              onTap: () => context.push('/cart'),
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primary.withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    // Cart icon + item count badge
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            const Icon(
+                              Icons.shopping_cart_outlined,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            Positioned(
+                              right: -6,
+                              top: -6,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  '$cartCount',
+                                  style: const TextStyle(
+                                    color: AppTheme.primary,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Shop name + item count text
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            shopName ?? 'Your Cart',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            '$cartCount ${cartCount == 1 ? 'item' : 'items'}',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Total price + arrow
+                    Text(
+                      '₹${cartTotal.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.chevron_right,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
     );
   }
 }

@@ -91,26 +91,29 @@ class HomeHeader extends ConsumerWidget {
 
           const SizedBox(height: 16),
 
-          // Search bar — not functional yet, we'll add it later
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppTheme.background,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
-                 SizedBox(width: 8),
-                Text(
-                  'Search groceries...',
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 14,
+          // Search bar — tapping opens the search screen
+          GestureDetector(
+            onTap: () => context.push('/search'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
+                   SizedBox(width: 8),
+                  Text(
+                    'Search groceries...',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 14,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
 

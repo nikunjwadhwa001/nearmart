@@ -48,6 +48,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     if (!mounted) return;
 
     if (error == null) {
+      // Invalidate user profile to force fresh fetch
       ref.invalidate(userProfileProvider);
       context.go('/home');
     } else {

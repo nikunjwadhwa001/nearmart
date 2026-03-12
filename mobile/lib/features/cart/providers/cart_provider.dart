@@ -59,3 +59,9 @@ final cartTotalProvider = Provider<double>((ref) {
   final items = ref.watch(cartProvider);
   return items.fold(0.0, (sum, item) => sum + item.total);
 });
+
+final cartShopNameProvider = Provider<String?>((ref) {
+  final items = ref.watch(cartProvider);
+  if (items.isEmpty) return null;
+  return items.first.shopName;
+});

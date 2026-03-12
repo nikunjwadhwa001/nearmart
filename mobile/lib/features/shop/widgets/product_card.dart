@@ -7,11 +7,13 @@ import 'add_to_cart_sheet.dart';
 class ProductCard extends ConsumerWidget {
   final Product product;
   final String shopId;
+  final String shopName;
 
   const ProductCard({
     super.key,
     required this.product,
     required this.shopId,
+    required this.shopName,
   });
 
   @override
@@ -111,6 +113,7 @@ class ProductCard extends ConsumerWidget {
                   builder: (sheetContext) => AddToCartSheet(
                     product: product,
                     shopId: shopId,
+                    shopName: shopName,
                   ),
                 );
               },

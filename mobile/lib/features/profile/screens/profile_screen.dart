@@ -24,7 +24,55 @@ class ProfileScreen extends ConsumerWidget {
         data: (userProfile) => _buildProfileContent(context, ref, userProfile),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(
-          child: Text('Error loading profile: $error'),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: AppTheme.error.withValues(alpha: 0.08),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.wifi_off_rounded,
+                    size: 28,
+                    color: AppTheme.error.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Unable to load profile',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Please check your connection',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: () => ref.invalidate(userProfileProvider),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Retry'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -103,6 +151,13 @@ class ProfileScreen extends ConsumerWidget {
 
         // Settings section
         const _SectionTitle(title: 'Account'),
+
+        _ProfileTile(
+          icon: Icons.receipt_long_outlined,
+          label: 'My Orders',
+          color: AppTheme.textPrimary,
+          onTap: () => context.push('/orders'),
+        ),
 
         _ProfileTile(
           icon: Icons.edit_outlined,
@@ -202,9 +257,10 @@ class ProfileScreen extends ConsumerWidget {
                   // Show error
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error updating profile: $e'),
+                      const SnackBar(
+                        content: Text('Unable to update profile. Please check your connection and try again.'),
                         backgroundColor: AppTheme.error,
+                        duration: Duration(seconds: 4),
                       ),
                     );
                   }
