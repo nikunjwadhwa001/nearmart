@@ -23,9 +23,10 @@ class User {
 
   // Convert database JSON to User object
   factory User.fromJson(Map<String, dynamic> json) {
+    final rawFullName = (json['full_name'] as String? ?? '').trim();
     return User(
       id: json['id'] as String,
-      fullName: json['full_name'] as String,
+      fullName: _sanitizeText(rawFullName, fallback: 'User'),
       phone: json['phone'] as String?,
       email: json['email'] as String?,
       role: json['role'] as String,
@@ -70,5 +71,18 @@ class User {
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
     );
+  }
+
+  // Removes invalid UTF-16 surrogate code units so UI text rendering never crashes.
+  static String _sanitizeText(String value, {required String fallback}) {
+    final buffer = StringBuffer();
+    for (final rune in value.runes) {
+      if (rune < 0xD800 || rune > 0xDFFF) {
+        buffer.writeCharCode(rune);
+      }
+    }
+
+    final cleaned = buffer.toString().trim();
+    return cleaned.isEmpty ? fallback : cleaned;
   }
 }

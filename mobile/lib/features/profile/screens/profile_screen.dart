@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_snackbar.dart';
+import '../../../core/utils/form_validators.dart';
+import '../../../core/widgets/app_async_state.dart';
+import '../../../core/widgets/app_dialogs.dart';
 import '../../../models/user.dart';
 import '../../auth/providers/auth_provider.dart' as auth;
 import '../providers/user_provider.dart';
@@ -22,55 +27,15 @@ class ProfileScreen extends ConsumerWidget {
       ),
       body: userProfileAsync.when(
         data: (userProfile) => _buildProfileContent(context, ref, userProfile),
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const AppLoadingState(),
         error: (error, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: AppTheme.error.withValues(alpha: 0.08),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.wifi_off_rounded,
-                    size: 28,
-                    color: AppTheme.error.withValues(alpha: 0.6),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Unable to load profile',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Please check your connection',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: () => ref.invalidate(userProfileProvider),
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Retry'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
+          child: AppErrorState(
+            title: 'Unable to load profile',
+            message: 'Please check your connection',
+            action: AppRetryButton(
+              onPressed: () => ref.invalidate(userProfileProvider),
+              label: 'Retry',
+              icon: Icons.refresh,
             ),
           ),
         ),
@@ -79,6 +44,8 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   Widget _buildProfileContent(BuildContext context, WidgetRef ref, User? userProfile) {
+    final safeDisplayName = _safeDisplayName(userProfile?.fullName);
+
     return ListView(
       // ListView is like a Column but scrollable
       // Perfect for settings/profile screens
@@ -95,7 +62,7 @@ class ProfileScreen extends ConsumerWidget {
                 backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
                 child: Text(
                   // Show first letter of name as avatar
-                  userProfile?.fullName.substring(0, 1).toUpperCase() ?? '?',
+                  _safeAvatarInitial(userProfile?.fullName),
                   style: const TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
@@ -106,7 +73,7 @@ class ProfileScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               // Show full name
               Text(
-                userProfile?.fullName ?? 'User',
+                safeDisplayName,
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
@@ -156,7 +123,7 @@ class ProfileScreen extends ConsumerWidget {
           icon: Icons.receipt_long_outlined,
           label: 'My Orders',
           color: AppTheme.textPrimary,
-          onTap: () => context.push('/orders'),
+          onTap: () => context.push(AppRoutes.orders),
         ),
 
         _ProfileTile(
@@ -175,8 +142,8 @@ class ProfileScreen extends ConsumerWidget {
 
         const SizedBox(height: 8),
 
-        // Danger zone
-        const _SectionTitle(title: 'Danger Zone'),
+        // Account removal section
+        const _SectionTitle(title: 'Account Deletion'),
 
         _ProfileTile(
           icon: Icons.delete_forever_rounded,
@@ -188,6 +155,27 @@ class ProfileScreen extends ConsumerWidget {
         const SizedBox(height: 32),
       ],
     );
+  }
+
+  String _safeAvatarInitial(String? fullName) {
+    final safeName = _safeDisplayName(fullName, fallback: '');
+    if (safeName.isEmpty) return '?';
+    return String.fromCharCode(safeName.runes.first).toUpperCase();
+  }
+
+  String _safeDisplayName(String? fullName, {String fallback = 'User'}) {
+    final raw = (fullName ?? '').trim();
+    if (raw.isEmpty) return fallback;
+
+    final buffer = StringBuffer();
+    for (final rune in raw.runes) {
+      if (rune < 0xD800 || rune > 0xDFFF) {
+        buffer.writeCharCode(rune);
+      }
+    }
+
+    final cleaned = buffer.toString().trim();
+    return cleaned.isEmpty ? fallback : cleaned;
   }
 
   // EDIT NAME DIALOG
@@ -214,15 +202,7 @@ class ProfileScreen extends ConsumerWidget {
               hintText: 'Enter your name',
               prefixIcon: Icon(Icons.person_outline),
             ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please enter your name';
-              }
-              if (value.trim().length < 2) {
-                return 'Name must be at least 2 characters';
-              }
-              return null;
-            },
+            validator: AppFormValidators.requiredFullName,
           ),
         ),
         actions: [
@@ -246,22 +226,14 @@ class ProfileScreen extends ConsumerWidget {
                   
                   // Show success message
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Profile updated successfully'),
-                        backgroundColor: AppTheme.primary,
-                      ),
-                    );
+                    showAppSuccessSnackBar(context, 'Profile updated successfully');
                   }
                 } catch (e) {
                   // Show error
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Unable to update profile. Please check your connection and try again.'),
-                        backgroundColor: AppTheme.error,
-                        duration: Duration(seconds: 4),
-                      ),
+                    showAppErrorSnackBar(
+                      context,
+                      'Unable to update profile. Please check your connection and try again.',
                     );
                   }
                 }
@@ -276,158 +248,50 @@ class ProfileScreen extends ConsumerWidget {
 
   // LOGOUT DIALOG
   // Always confirm before logging out — prevents accidental taps
-  void _showLogoutDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      // barrierDismissible — can user tap outside to close?
-      barrierDismissible: true,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Text('Log Out'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Are you sure you want to log out?',
-            ),
-            const SizedBox(height: 24),
-            // Cancel button — full width, outlined
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Confirm logout button — full width, filled
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                ),
-                onPressed: () async {
-                  // Close dialog first
-                  Navigator.pop(dialogContext);
-                  // Call logout in auth provider
-                  await ref.read(auth.authNotifierProvider.notifier).signOut();
-                  // Navigate to login — remove all previous routes
-                  // 'go' replaces current route
-                  // We use go here because after logout there's
-                  // no "back" — user must log in again
-                  if (context.mounted) context.go('/login');
-                },
-                child: const Text('Log Out'),
-              ),
-            ),
-          ],
-        ),
-      ),
+  Future<void> _showLogoutDialog(BuildContext context, WidgetRef ref) async {
+    final shouldLogout = await showAppConfirmDialog(
+      context,
+      title: 'Log Out',
+      message: 'Are you sure you want to log out?',
+      confirmText: 'Log Out',
     );
+
+    if (!shouldLogout) return;
+
+    await ref.read(auth.authNotifierProvider.notifier).signOut();
+    if (context.mounted) context.go(AppRoutes.login);
   }
 
   // DELETE ACCOUNT DIALOG
   // Extra confirmation — this is irreversible
-  void _showDeleteDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      barrierDismissible: false, // Must explicitly choose — no accidental dismiss
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_rounded, color: AppTheme.error, size: 24),
-             SizedBox(width: 8),
-             Text('Delete Account'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'This will permanently delete your account and all your data including orders and addresses.\n\nThis cannot be undone.',
-            ),
-            const SizedBox(height: 24),
-            // Cancel button — full width, outlined
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Delete button — full width, filled with error color
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.error,
-                ),
-                onPressed: () async {
-                  Navigator.pop(dialogContext);
-                  // Show loading dialog
-                  _showLoadingDialog(context);
-                  await ref
-                      .read(auth.authNotifierProvider.notifier)
-                      .deleteAccount(context);
-                },
-                child: const Text(
-                  'Delete Account',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    // Listen for errors after dialog is shown
-    ref.listen<auth.AuthState>(auth.authNotifierProvider, (previous, next) {
-      if (next.error != null && !next.isLoading) {
-        // Close loading dialog if it's showing
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        }
-        // Show error snackbar
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.error!),
-            backgroundColor: AppTheme.error,
-            duration: const Duration(seconds: 4),
-            action: SnackBarAction(
-              label: 'Dismiss',
-              textColor: Colors.white,
-              onPressed: () {},
-            ),
-          ),
-        );
-      }
-    });
-  }
-
-  // Loading dialog for delete operation
-  void _showLoadingDialog(BuildContext context) {
-    showDialog(
-      context: context,
+  Future<void> _showDeleteDialog(BuildContext context, WidgetRef ref) async {
+    final shouldDelete = await showAppConfirmDialog(
+      context,
+      title: 'Delete Account',
+      message:
+          'This will permanently delete your account and all your data including '
+          'orders and addresses.\n\nThis cannot be undone.',
+      confirmText: 'Delete Account',
+      confirmColor: AppTheme.error,
       barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Deleting your account...'),
-          ],
-        ),
-      ),
+      titlePrefix: const Icon(Icons.warning_rounded, color: AppTheme.error, size: 24),
     );
+
+    if (!shouldDelete) return;
+    if (!context.mounted) return;
+
+    showAppLoadingDialog(context, message: 'Deleting your account...');
+    await ref.read(auth.authNotifierProvider.notifier).deleteAccount(context);
+
+    if (!context.mounted) return;
+
+    final authState = ref.read(auth.authNotifierProvider);
+    if (authState.error != null && !authState.isLoading) {
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      showAppErrorSnackBar(context, authState.error!);
+    }
   }
 }
 

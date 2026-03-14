@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import '../../../core/utils/app_snackbar.dart';
+import '../../../core/utils/form_validators.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_async_state.dart';
+import '../../../core/widgets/app_dialogs.dart';
 import '../../../models/address.dart';
 import '../providers/address_provider.dart';
 
@@ -30,6 +34,8 @@ class _AddressSelectionSheet extends ConsumerStatefulWidget {
 class _AddressSelectionSheetState
     extends ConsumerState<_AddressSelectionSheet> {
   bool _showAddForm = false;
+  String? _selectedAddressId;
+  String? _deletingAddressId;
 
   // Form controllers
   final _formKey = GlobalKey<FormState>();
@@ -61,9 +67,7 @@ class _AddressSelectionSheetState
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please enable location services')),
-          );
+          showAppInfoSnackBar(context, 'Please enable location services');
         }
         setState(() => _isLocating = false);
         return;
@@ -75,9 +79,7 @@ class _AddressSelectionSheetState
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Location permission denied')),
-            );
+            showAppInfoSnackBar(context, 'Location permission denied');
           }
           setState(() => _isLocating = false);
           return;
@@ -86,10 +88,9 @@ class _AddressSelectionSheetState
 
       if (permission == LocationPermission.deniedForever) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Location permission permanently denied. Enable in Settings.'),
-            ),
+          showAppErrorSnackBar(
+            context,
+            'Location permission permanently denied. Enable in Settings.',
           );
         }
         setState(() => _isLocating = false);
@@ -123,12 +124,7 @@ class _AddressSelectionSheetState
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not detect location: $e'),
-            backgroundColor: AppTheme.error,
-          ),
-        );
+        showAppErrorSnackBar(context, 'Could not detect location: $e');
       }
     }
 
@@ -213,64 +209,14 @@ class _AddressSelectionSheetState
     ScrollController scrollController,
   ) {
     return addressesAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: AppTheme.error.withValues(alpha: 0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.wifi_off_rounded,
-                  size: 28,
-                  color: AppTheme.error.withValues(alpha: 0.6),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Unable to load addresses',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Please check your internet connection\nand try again',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 13,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: () => ref.invalidate(myAddressesProvider),
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Retry'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-            ],
-          ),
+      loading: () => const AppLoadingState(),
+      error: (e, _) => AppErrorState(
+        title: 'Unable to load addresses',
+        message: 'Please check your internet connection\nand try again',
+        action: AppRetryButton(
+          onPressed: () => ref.invalidate(myAddressesProvider),
+          label: 'Retry',
+          icon: Icons.refresh,
         ),
       ),
       data: (addresses) {
@@ -282,28 +228,112 @@ class _AddressSelectionSheetState
               _detectLocation();
             }
           });
-          return const Center(
-            child: Text(
-              'No saved addresses. Add one to continue.',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
+          return const AppEmptyState(
+            icon: Icons.location_on_outlined,
+            title: 'No saved addresses',
+            message: 'Add one to continue.',
+            iconSize: 52,
+            padding: EdgeInsets.all(24),
           );
         }
 
-        return ListView.builder(
-          controller: scrollController,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: addresses.length,
-          itemBuilder: (context, index) {
-            final address = addresses[index];
-            return _AddressTile(
-              address: address,
-              onTap: () => Navigator.pop(context, address),
-            );
-          },
+        final selectedId = _resolveSelectedAddressId(addresses);
+
+        final selectedAddress = addresses.firstWhere(
+          (address) => address.id == selectedId,
+        );
+
+        return Column(
+          children: [
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: addresses.length,
+                itemBuilder: (context, index) {
+                  final address = addresses[index];
+                  return _AddressTile(
+                    address: address,
+                    selected: address.id == selectedId,
+                    isDeleting: _deletingAddressId == address.id,
+                    onTap: () {
+                      setState(() => _selectedAddressId = address.id);
+                    },
+                    onDelete: () => _deleteAddress(address),
+                  );
+                },
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, selectedAddress),
+                    child: const Text('Confirm & Deliver Here'),
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
+  }
+
+  Future<void> _deleteAddress(Address address) async {
+    if (_deletingAddressId != null) return;
+
+    final shouldDelete = await showAppConfirmDialog(
+      context,
+      title: 'Delete Address',
+      message: 'Remove this saved address? This cannot be undone.',
+      confirmText: 'Delete',
+      confirmColor: AppTheme.error,
+    );
+
+    if (!shouldDelete) return;
+
+    setState(() => _deletingAddressId = address.id);
+
+    try {
+      final repo = ref.read(addressRepositoryProvider);
+      await repo.deleteAddress(address.id);
+
+      ref.invalidate(myAddressesProvider);
+
+      if (!mounted) return;
+
+      if (_selectedAddressId == address.id) {
+        setState(() => _selectedAddressId = null);
+      }
+
+      showAppSuccessSnackBar(context, 'Address deleted.');
+    } catch (e) {
+      if (mounted) {
+        showAppErrorSnackBar(context, 'Failed to delete address: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _deletingAddressId = null);
+      }
+    }
+  }
+
+  String _resolveSelectedAddressId(List<Address> addresses) {
+    if (_selectedAddressId != null &&
+        addresses.any((address) => address.id == _selectedAddressId)) {
+      return _selectedAddressId!;
+    }
+
+    final defaultAddress = addresses.where((address) => address.isDefault);
+    if (defaultAddress.isNotEmpty) {
+      return defaultAddress.first.id;
+    }
+
+    return addresses.first.id;
   }
 
   Widget _buildAddForm(ScrollController scrollController) {
@@ -443,8 +473,7 @@ class _AddressSelectionSheetState
               ),
               maxLines: 2,
               textCapitalization: TextCapitalization.sentences,
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Please enter your exact address' : null,
+              validator: AppFormValidators.requiredAddressLine,
             ),
 
             const SizedBox(height: 16),
@@ -460,15 +489,7 @@ class _AddressSelectionSheetState
               ),
               keyboardType: TextInputType.phone,
               maxLength: 10,
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) {
-                  return 'Phone number is required for delivery';
-                }
-                if (!RegExp(r'^[6-9]\d{9}$').hasMatch(v.trim())) {
-                  return 'Enter a valid 10-digit mobile number';
-                }
-                return null;
-              },
+              validator: AppFormValidators.requiredIndianMobile,
             ),
 
             const SizedBox(height: 16),
@@ -504,7 +525,7 @@ class _AddressSelectionSheetState
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _saveAndSelect,
-                child: const Text('Save & Deliver Here'),
+                child: const Text('Save Address'),
               ),
             ),
           ],
@@ -532,15 +553,17 @@ class _AddressSelectionSheetState
       // Invalidate cache so future reads pick up the new address
       ref.invalidate(myAddressesProvider);
 
-      if (mounted) Navigator.pop(context, address);
+      if (!mounted) return;
+
+      setState(() {
+        _selectedAddressId = address.id;
+        _showAddForm = false;
+      });
+
+      showAppSuccessSnackBar(context, 'Address saved. Confirm to place order.');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to save address: $e'),
-            backgroundColor: AppTheme.error,
-          ),
-        );
+        showAppErrorSnackBar(context, 'Failed to save address: $e');
       }
     }
   }
@@ -548,8 +571,17 @@ class _AddressSelectionSheetState
 
 class _AddressTile extends StatelessWidget {
   final Address address;
+  final bool selected;
+  final bool isDeleting;
   final VoidCallback onTap;
-  const _AddressTile({required this.address, required this.onTap});
+  final VoidCallback onDelete;
+  const _AddressTile({
+    required this.address,
+    required this.selected,
+    required this.isDeleting,
+    required this.onTap,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -562,9 +594,12 @@ class _AddressTile extends StatelessWidget {
           color: AppTheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: address.isDefault
-                ? AppTheme.primary.withValues(alpha: 0.4)
-                : Colors.grey.shade200,
+            color: selected
+                ? AppTheme.primary.withValues(alpha: 0.75)
+                : address.isDefault
+                    ? AppTheme.primary.withValues(alpha: 0.4)
+                    : Colors.grey.shade200,
+            width: selected ? 1.5 : 1,
           ),
         ),
         child: Row(
@@ -639,10 +674,29 @@ class _AddressTile extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(
-              Icons.chevron_right,
-              color: AppTheme.textSecondary,
-              size: 20,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isDeleting)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  IconButton(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline),
+                    color: AppTheme.error,
+                    tooltip: 'Delete address',
+                    splashRadius: 20,
+                  ),
+                Icon(
+                  selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                  color: selected ? AppTheme.primary : AppTheme.textSecondary,
+                  size: 20,
+                ),
+              ],
             ),
           ],
         ),

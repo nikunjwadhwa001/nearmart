@@ -40,8 +40,8 @@ class OrderRepository {
 
     // Order placement mutates timeline + totals, so invalidate relevant reads.
     if (userId != null) {
-      await _cache.invalidate('orders_list:v1:user:$userId');
-      await _cache.invalidatePrefix('order_detail:v1:user:$userId:');
+      await _cache.invalidate('orders_list:v2:user:$userId');
+      await _cache.invalidatePrefix('order_detail:v2:user:$userId:');
     }
 
     return orderId as String;
@@ -49,9 +49,11 @@ class OrderRepository {
 
   /// Fetch all orders for the current customer, newest first.
   Future<List<Order>> getMyOrders() async {
-    final userId = _supabase.auth.currentUser?.id ?? 'anon';
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return [];
+
     // User-scoped key avoids sharing order history between accounts.
-    final key = 'orders_list:v1:user:$userId';
+    final key = 'orders_list:v2:user:$userId';
 
     final response = await _cache.getOrFetch<List<dynamic>>(
       key: key,
@@ -61,6 +63,7 @@ class OrderRepository {
         final result = await _supabase
             .from('orders')
             .select('*, shops(name), order_items(*), addresses(address_line, city, pincode, phone)')
+            .eq('customer_id', userId)
             .order('placed_at', ascending: false);
         return (result as List).cast<dynamic>();
       },
@@ -75,9 +78,13 @@ class OrderRepository {
 
   /// Fetch a single order with its items.
   Future<Order> getOrder(String orderId) async {
-    final userId = _supabase.auth.currentUser?.id ?? 'anon';
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) {
+      throw Exception('Not logged in');
+    }
+
     // One cache entry per order, per user.
-    final key = 'order_detail:v1:user:$userId:order:$orderId';
+    final key = 'order_detail:v2:user:$userId:order:$orderId';
 
     final response = await _cache.getOrFetch<Map<String, dynamic>>(
       key: key,
@@ -88,6 +95,7 @@ class OrderRepository {
             .from('orders')
             .select('*, shops(name), order_items(*), addresses(address_line, city, pincode, phone)')
             .eq('id', orderId)
+            .eq('customer_id', userId)
             .single();
         return Map<String, dynamic>.from(result as Map);
       },

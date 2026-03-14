@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import '../../../models/user.dart';
 import '../../../core/cache/query_cache.dart';
+import '../../../core/constants/app_constants.dart';
 
 // Fetch current user profile from public.users table
 // This gets the full profile data, not just auth info
@@ -15,12 +16,12 @@ final userProfileProvider = FutureProvider<User?>((ref) async {
 
   try {
     // Cache profile by user id to prevent cross-account reuse.
-    final cacheKey = 'profile:v1:user:${authUser.id}';
+    final cacheKey = AppCacheKeys.userProfile(authUser.id);
 
     final response = await cache.getOrFetch<Map<String, dynamic>>(
       key: cacheKey,
       // Profile changes infrequently and is invalidated explicitly on update.
-      ttl: const Duration(hours: 24),
+      ttl: AppTtl.userProfile,
       fetcher: () async {
         final result = await supabase
             .from('users')
@@ -68,7 +69,7 @@ class UserUpdate {
     );
 
     // Keep cache and server in sync after profile mutation.
-    await QueryCache.instance.invalidate('profile:v1:user:$userId');
+    await QueryCache.instance.invalidate(AppCacheKeys.userProfile(userId));
 
     // Refresh the profile provider to show updated data
     ref.invalidate(userProfileProvider);

@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/price_formatter.dart';
+import '../../../core/widgets/app_async_state.dart';
+import '../../../core/widgets/order_status_widgets.dart';
 import '../../../models/order.dart';
 import '../providers/order_provider.dart';
 
@@ -19,55 +23,15 @@ class OrderHistoryScreen extends ConsumerWidget {
         backgroundColor: AppTheme.surface,
       ),
       body: ordersAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const AppLoadingState(),
         error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: AppTheme.error.withValues(alpha: 0.08),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.wifi_off_rounded,
-                    size: 28,
-                    color: AppTheme.error.withValues(alpha: 0.6),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Unable to load orders',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Please check your connection',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: () => ref.invalidate(myOrdersProvider),
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Retry'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
+          child: AppErrorState(
+            title: 'Unable to load orders',
+            message: 'Please check your connection',
+            action: AppRetryButton(
+              onPressed: () => ref.invalidate(myOrdersProvider),
+              label: 'Retry',
+              icon: Icons.refresh,
             ),
           ),
         ),
@@ -125,7 +89,7 @@ class _OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => context.push('/order/${order.id}'),
+      onTap: () => context.push(AppRoutes.orderDetail(order.id)),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
@@ -152,7 +116,7 @@ class _OrderCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                _StatusChip(status: order.status, label: order.statusLabel),
+                OrderStatusChip(status: order.status, label: order.statusLabel),
               ],
             ),
 
@@ -170,7 +134,7 @@ class _OrderCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '₹${order.totalAmount.toStringAsFixed(0)}',
+                  formatPrice(order.totalAmount),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
@@ -207,59 +171,5 @@ class _OrderCard extends StatelessWidget {
     if (diff.inDays < 7) return '${diff.inDays}d ago';
 
     return '${date.day}/${date.month}/${date.year}';
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  final String status;
-  final String label;
-  const _StatusChip({required this.status, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    Color bg;
-    Color fg;
-    switch (status) {
-      case 'placed':
-        bg = Colors.blue.shade50;
-        fg = Colors.blue.shade700;
-        break;
-      case 'confirmed':
-      case 'preparing':
-        bg = Colors.orange.shade50;
-        fg = Colors.orange.shade700;
-        break;
-      case 'out_for_delivery':
-        bg = AppTheme.primary.withValues(alpha: 0.1);
-        fg = AppTheme.primary;
-        break;
-      case 'delivered':
-        bg = Colors.green.shade50;
-        fg = Colors.green.shade700;
-        break;
-      case 'cancelled':
-        bg = Colors.red.shade50;
-        fg = Colors.red.shade700;
-        break;
-      default:
-        bg = Colors.grey.shade100;
-        fg = Colors.grey.shade700;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: fg,
-        ),
-      ),
-    );
   }
 }

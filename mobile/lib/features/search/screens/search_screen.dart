@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/price_formatter.dart';
 import '../../../models/cart_item.dart';
 import '../../../models/search_result.dart';
 import '../../cart/providers/cart_provider.dart';
+import '../../cart/utils/cart_shop_guard.dart';
 import '../providers/search_provider.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -18,6 +20,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   Timer? _debounce;
+  String _localQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(searchQueryProvider.notifier).state = '';
+    });
+  }
 
   @override
   void dispose() {
@@ -28,15 +40,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _onChanged(String value) {
+    _localQuery = value;
     setState(() {});
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
       ref.read(searchQueryProvider.notifier).state = value;
     });
   }
 
   void _clearSearch() {
     _controller.clear();
+    _localQuery = '';
     setState(() {});
     ref.read(searchQueryProvider.notifier).state = '';
     _focusNode.requestFocus();
@@ -45,7 +60,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final resultsAsync = ref.watch(searchResultsProvider);
-    final query = ref.watch(searchQueryProvider);
+    final query = _localQuery;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -514,7 +529,9 @@ class _SearchResultTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cartItems = ref.watch(cartProvider);
-    final inCart = cartItems.where((i) => i.variantId == item.variantId);
+    final inCart = cartItems.where(
+      (i) => i.shopId == item.shopId && i.variantId == item.variantId,
+    );
     final qty = inCart.isEmpty ? 0 : inCart.first.quantity;
 
     return Padding(
@@ -569,7 +586,7 @@ class _SearchResultTile extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '₹${item.price.toStringAsFixed(0)}',
+                formatPrice(item.price),
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -600,20 +617,33 @@ class _SearchResultTile extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              onPressed: () {
-                ref.read(cartProvider.notifier).addItem(
-                  CartItem(
-                    variantId: item.variantId,
-                    shopId: item.shopId,
-                    shopName: item.shopName,
-                    productName: item.productName,
-                    brandName: item.brandName,
-                    variantName: item.variantName,
-                    price: item.price,
-                    quantity: 1,
-                    imageUrl: item.imageUrl,
-                  ),
+              onPressed: () async {
+                final cartItem = CartItem(
+                  variantId: item.variantId,
+                  shopId: item.shopId,
+                  shopName: item.shopName,
+                  productName: item.productName,
+                  brandName: item.brandName,
+                  variantName: item.variantName,
+                  price: item.price,
+                  quantity: 1,
+                  imageUrl: item.imageUrl,
                 );
+
+                final cartNotifier = ref.read(cartProvider.notifier);
+                final result = cartNotifier.addItem(cartItem);
+
+                if (!result.isConflict) return;
+
+                final shouldReplace = await showReplaceCartDialog(
+                  context,
+                  currentShopName: result.currentShopName ?? 'another store',
+                  newShopName: item.shopName,
+                );
+
+                if (!shouldReplace) return;
+
+                cartNotifier.addItem(cartItem, replaceExistingShop: true);
               },
               child: const Text(
                 'Add',
@@ -637,7 +667,7 @@ class _SearchResultTile extends ConsumerWidget {
                   InkWell(
                     onTap: () => ref
                         .read(cartProvider.notifier)
-                        .updateQuantity(item.variantId, qty - 1),
+                        .updateQuantity(item.shopId, item.variantId, qty - 1),
                     child: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       child: Icon(Icons.remove, size: 16, color: AppTheme.primary),
@@ -658,7 +688,7 @@ class _SearchResultTile extends ConsumerWidget {
                   InkWell(
                     onTap: () => ref
                         .read(cartProvider.notifier)
-                        .updateQuantity(item.variantId, qty + 1),
+                        .updateQuantity(item.shopId, item.variantId, qty + 1),
                     child: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       child: Icon(Icons.add, size: 16, color: AppTheme.primary),

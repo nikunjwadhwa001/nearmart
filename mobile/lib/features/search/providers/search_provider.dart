@@ -8,7 +8,7 @@ final searchRepositoryProvider = Provider<SearchRepository>((ref) {
 });
 
 // Debounced search query — updated from the search screen
-final searchQueryProvider = StateProvider<String>((ref) => '');
+final searchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
 
 // Fetches search results when query changes
 final searchResultsProvider = FutureProvider<List<SearchResult>>((ref) async {

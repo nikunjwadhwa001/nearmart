@@ -1,9 +1,90 @@
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/cache/query_cache.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/app_routes.dart';
+
+class _ParsedAuthError {
+  final String code;
+  final String message;
+
+  const _ParsedAuthError({
+    required this.code,
+    required this.message,
+  });
+}
+
+_ParsedAuthError _parseAuthError(AuthException e) {
+  final raw = e.message.trim();
+
+  if (raw.startsWith('{') && raw.endsWith('}')) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        final code = (decoded['code'] as String? ?? '').toLowerCase();
+        final message = (decoded['message'] as String?)?.trim() ?? raw;
+        return _ParsedAuthError(code: code, message: message);
+      }
+    } catch (_) {
+      // Fall through and use the original message.
+    }
+  }
+
+  return _ParsedAuthError(code: '', message: raw);
+}
+
+String _friendlySendOtpError(AuthException e) {
+  final parsed = _parseAuthError(e);
+  final msg = parsed.message.toLowerCase();
+  final code = parsed.code;
+
+  if (msg.contains('invalid email')) {
+    return 'Please enter a valid email address.';
+  }
+
+  if (code.contains('rate') || msg.contains('rate limit')) {
+    return 'Too many OTP requests. Please wait a moment and try again.';
+  }
+
+  if (code == 'unexpected_failure' || msg.contains('error sending magic link email')) {
+    return 'Unable to send OTP right now. Please try again in a few minutes.';
+  }
+
+  if (msg.contains('network') || msg.contains('socket') || msg.contains('lookup')) {
+    return 'Network issue. Please check your internet connection and try again.';
+  }
+
+  return 'Unable to send OTP right now. Please try again.';
+}
+
+String _friendlyVerifyOtpError(AuthException e) {
+  final parsed = _parseAuthError(e);
+  final msg = parsed.message.toLowerCase();
+  final code = parsed.code;
+
+  if (msg.contains('expired')) {
+    return 'This OTP has expired. Please request a new one.';
+  }
+
+  if (msg.contains('invalid') || msg.contains('token')) {
+    return 'Invalid OTP. Please try again.';
+  }
+
+  if (code.contains('rate') || msg.contains('rate limit')) {
+    return 'Too many attempts. Please wait a moment and try again.';
+  }
+
+  if (msg.contains('network') || msg.contains('socket') || msg.contains('lookup')) {
+    return 'Network issue. Please check your internet connection and try again.';
+  }
+
+  return 'Unable to verify OTP. Please try again.';
+}
 
 // Auth state — what the UI needs to know
 class AuthState {
@@ -53,11 +134,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       state = state.copyWith(isLoading: false, otpSent: true);
     } on AuthException catch (e) {
-      state = state.copyWith(isLoading: false, error: e.message);
+      state = state.copyWith(
+        isLoading: false,
+        error: _friendlySendOtpError(e),
+      );
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Something went wrong. Please try again.',
+        error: AppMessages.genericTryAgain,
       );
     }
   }
@@ -87,19 +171,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
       } else {
         state = state.copyWith(
           isLoading: false,
-          error: 'Invalid OTP. Please try again.',
+          error: AppMessages.invalidOtp,
         );
-        return 'Invalid OTP. Please try again.';
+        return AppMessages.invalidOtp;
       }
     } on AuthException catch (e) {
-      state = state.copyWith(isLoading: false, error: e.message);
-      return e.message;
+      final friendlyError = _friendlyVerifyOtpError(e);
+      state = state.copyWith(isLoading: false, error: friendlyError);
+      return friendlyError;
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Something went wrong. Please try again.',
+        error: AppMessages.genericTryAgain,
       );
-      return 'Something went wrong. Please try again.';
+      return AppMessages.genericTryAgain;
     }
   }
 
@@ -110,6 +195,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String email,
     required String fullName,
   }) async {
+    final normalizedFullName = fullName.trim();
+
     try {
       // Check if user already exists (returning user)
       final existing = await _supabase
@@ -123,25 +210,50 @@ class AuthNotifier extends StateNotifier<AuthState> {
         await _supabase.from('users').insert({
           'id': userId,
           'email': email,
-          'full_name': fullName.isNotEmpty ? fullName : 'User',
+          'full_name': normalizedFullName.isNotEmpty ? normalizedFullName : 'User',
           'role': 'customer',
           'is_active': true,
         });
-        debugPrint('Created user in public.users: $fullName');
-      } else if (fullName.isNotEmpty) {
-        // User exists — update name if they provided one and current is default
-        final currentName = existing['full_name'] as String;
-        if (currentName == 'New User' || currentName == 'User' || currentName.isEmpty) {
+        debugPrint('Created user in public.users: $normalizedFullName');
+      } else if (normalizedFullName.isNotEmpty) {
+        // Returning user — sync name from login input when it changed.
+        final currentName = (existing['full_name'] ?? '').toString().trim();
+        if (currentName != normalizedFullName) {
           await _supabase
               .from('users')
-              .update({'full_name': fullName})
+              .update({'full_name': normalizedFullName})
               .eq('id', userId);
-          debugPrint('Updated user name to: $fullName');
+
+          // Keep auth metadata aligned with app profile name.
+          await _supabase.auth.updateUser(
+            UserAttributes(data: {'full_name': normalizedFullName}),
+          );
+          debugPrint('Updated user name to: $normalizedFullName');
         }
       }
     } catch (e) {
       debugPrint('Error ensuring user in database: $e');
-      // Don't fail the login — user can still use the app
+      // Fallback for returning users: try direct name sync even if earlier checks failed.
+      if (normalizedFullName.isNotEmpty) {
+        try {
+          await _supabase
+              .from('users')
+              .update({'full_name': normalizedFullName})
+              .eq('id', userId);
+
+          await _supabase.auth.updateUser(
+            UserAttributes(data: {'full_name': normalizedFullName}),
+          );
+
+          debugPrint('Fallback name sync succeeded: $normalizedFullName');
+        } catch (fallbackError) {
+          debugPrint('Fallback name sync failed: $fallbackError');
+        }
+      }
+      // Do not fail login on profile sync issues.
+    } finally {
+      // Always force a fresh profile read after OTP login.
+      await QueryCache.instance.invalidate(AppCacheKeys.userProfile(userId));
     }
   }
 
@@ -167,34 +279,61 @@ Future<void> deleteAccount(BuildContext context) async {
 
   try {
     final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return;
-
-    try {
-      // Try to call Edge Function to delete account
-      // This function has service role permissions to delete from auth.users
-      final response = await _supabase.functions.invoke('delete-account');
-
-      if (response.status != 200) {
-        throw Exception(response.data['error'] ?? 'Failed to delete account');
-      }
-    } catch (e) {
-      debugPrint('Edge function error: $e');
-      
-      // Fallback: If Edge Function fails (e.g., user not in public.users),
-      // try direct deletion from public.users and sign out
-      try {
-        await _supabase
-            .from('users')
-            .delete()
-            .eq('id', userId);
-      } catch (dbError) {
-        debugPrint('Database delete error (user may not exist): $dbError');
-        // Continue anyway - user might not be in public.users
-      }
+    if (userId == null) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Session expired. Please log in again.',
+      );
+      return;
     }
 
-    // Sign out locally
-    await _supabase.auth.signOut();
+    // Refresh the session to guarantee a fresh, non-expired JWT before
+    // invoking the edge function (stale tokens cause 401 Unauthorized).
+    String? freshToken;
+    try {
+      final refreshed = await _supabase.auth.refreshSession();
+      freshToken = refreshed.session?.accessToken;
+    } catch (refreshError) {
+      debugPrint('Session refresh before delete-account failed: $refreshError');
+    }
+    // Fall back to the current session token if refresh failed.
+    freshToken ??= _supabase.auth.currentSession?.accessToken;
+
+    if (freshToken == null) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Session expired. Please log in again.',
+      );
+      return;
+    }
+
+    // Keep the functions client in sync with the refreshed access token.
+    // FunctionsClient caches Authorization headers, so update it explicitly.
+    _supabase.functions.setAuth(freshToken);
+
+    // Debug: confirm the token looks like a Supabase JWT (starts with "eyJ")
+    debugPrint(
+      'delete-account: token prefix="${freshToken.substring(0, freshToken.length.clamp(0, 6))}"',
+    );
+
+    // Delete account via secure Edge Function.
+    final response = await _supabase.functions.invoke('delete-account');
+    if (response.status != 200) {
+      final data = response.data;
+      String functionError = 'Failed to delete account';
+      if (data is Map && data['error'] is String) {
+        functionError = data['error'] as String;
+      }
+      throw Exception(functionError);
+    }
+
+    // Sign out locally (token might already be invalid after auth user deletion).
+    try {
+      await _supabase.auth.signOut();
+    } catch (signOutError) {
+      debugPrint('Sign out after account deletion failed: $signOutError');
+    }
+
     // Account is gone; clear cached data to avoid stale reads on reused device.
     await QueryCache.instance.clearAll();
 
@@ -206,13 +345,44 @@ Future<void> deleteAccount(BuildContext context) async {
       if (Navigator.canPop(context)) {
         Navigator.pop(context);
       }
-      context.go('/login');
+      context.go(AppRoutes.login);
     }
 
+  } on FunctionException catch (e) {
+    debugPrint(
+      'Delete account function error: status=${e.status}, '
+      'details=${e.details}, reason=${e.reasonPhrase}',
+    );
+
+    // Surface DB constraint details in debug builds to make FK errors visible.
+    if (e.details is Map) {
+      final d = e.details as Map;
+      debugPrint(
+        'delete-account DB error detail="${d['detail']}" '
+        'hint="${d['hint']}" code="${d['code']}"',
+      );
+    }
+
+    var errorMessage = 'Could not delete account. Please try again later.';
+    if (e.status == 401) {
+      errorMessage = 'Session expired. Please log in again.';
+    } else if (e.details is Map) {
+      final details = e.details as Map;
+      if (details['error'] is String) {
+        errorMessage = details['error'] as String;
+      } else if (details['message'] is String) {
+        errorMessage = details['message'] as String;
+      }
+    }
+
+    state = state.copyWith(
+      isLoading: false,
+      error: errorMessage,
+    );
   } catch (e) {
     // Log the actual error for debugging
     debugPrint('Delete account error: $e');
-    
+
     state = state.copyWith(
       isLoading: false,
       error: 'Could not delete account. Please try again later.',

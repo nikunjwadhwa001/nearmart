@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/price_formatter.dart';
+import '../../../core/widgets/app_async_state.dart';
 import '../providers/shop_provider.dart';
 import '../widgets/shop_card.dart';
 import '../widgets/home_header.dart';
@@ -135,66 +138,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                 // ERROR STATE — friendly network/generic error
                 error: (error, stack) => SliverToBoxAdapter(
-                  child: Padding(
+                  child: AppErrorState(
+                    title: 'Unable to load stores',
+                    message: 'Please check your internet connection\nand try again',
                     padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: AppTheme.error.withValues(alpha: 0.08),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.wifi_off_rounded,
-                            size: 36,
-                            color: AppTheme.error.withValues(alpha: 0.6),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Unable to load stores',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Please check your internet connection\nand try again',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 13,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _getLocation,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.primary,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text(
-                              'Try Again',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    iconContainerSize: 80,
+                    iconSize: 36,
+                    titleSize: 16,
+                    centerContent: false,
+                    action: AppRetryButton(onPressed: _getLocation, expand: true),
                   ),
                 ),
 
@@ -202,35 +154,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 data: (shops) {
                   // No shops found — customer friendly message
                   if (shops.isEmpty) {
-                    return SliverToBoxAdapter(
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Column(
-                            children: [
-                              const Icon(Icons.store_outlined,
-                                  size: 64, color: Colors.grey),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No stores nearby',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(color: AppTheme.textPrimary,
-                                    fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'We haven\'t launched in your area yet.\nCheck back soon!',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: AppTheme.textSecondary,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                    return const SliverToBoxAdapter(
+                      child: AppEmptyState(
+                        icon: Icons.store_outlined,
+                        title: 'No stores nearby',
+                        message:
+                            'We haven\'t launched in your area yet.\nCheck back soon!',
                       ),
                     );
                   }
@@ -256,7 +185,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Floating cart bar — only visible when cart has items
       bottomNavigationBar: cartCount > 0
           ? GestureDetector(
-              onTap: () => context.push('/cart'),
+            onTap: () => context.push(AppRoutes.cart),
               child: Container(
                 margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -342,7 +271,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     // Total price + arrow
                     Text(
-                      '₹${cartTotal.toStringAsFixed(0)}',
+                      formatPrice(cartTotal),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,

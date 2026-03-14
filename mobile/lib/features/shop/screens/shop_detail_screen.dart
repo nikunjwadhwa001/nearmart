@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/constants/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_snackbar.dart';
+import '../../../core/widgets/app_async_state.dart';
 import '../../../models/shop.dart';
 import '../providers/shop_detail_provider.dart';
 import '../widgets/variant_tile.dart';
@@ -19,6 +24,56 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
   // Track which products are expanded — all start expanded
   final Set<String> _expandedProducts = {};
   bool _initialized = false;
+
+  Future<void> _callShop(String? phone) async {
+    final rawPhone = phone?.trim() ?? '';
+    if (rawPhone.isEmpty) {
+      if (!mounted) return;
+      showAppInfoSnackBar(context, 'Shop phone number is not available.');
+      return;
+    }
+
+    final normalizedPhone = _normalizePhone(rawPhone);
+    if (normalizedPhone.isEmpty) {
+      if (!mounted) return;
+      showAppInfoSnackBar(context, 'Shop phone number is not available.');
+      return;
+    }
+
+    final dialerUris = <Uri>[
+      Uri(scheme: 'tel', path: normalizedPhone),
+      Uri.parse('tel://$normalizedPhone'),
+      if (defaultTargetPlatform == TargetPlatform.iOS)
+        Uri.parse('telprompt:$normalizedPhone'),
+    ];
+
+    for (final uri in dialerUris) {
+      try {
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.platformDefault,
+        );
+        if (launched) return;
+      } catch (_) {
+        // Try the next URI fallback.
+      }
+    }
+
+    if (!mounted) return;
+    showAppErrorSnackBar(
+      context,
+      'Unable to open dialer on this device. Please call $rawPhone manually.',
+    );
+  }
+
+  String _normalizePhone(String value) {
+    final cleaned = value.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (cleaned.startsWith('+')) {
+      final digits = cleaned.substring(1).replaceAll('+', '');
+      return digits.isEmpty ? '' : '+$digits';
+    }
+    return cleaned.replaceAll('+', '');
+  }
 
   void _initExpanded(Map<String, List<dynamic>> inventory) {
     if (_initialized) return;
@@ -165,9 +220,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                       IconButton(
                         icon: const Icon(Icons.phone_outlined),
                         color: AppTheme.primary,
-                        onPressed: () {
-                          // Phone call — will add later
-                        },
+                        onPressed: () => _callShop(shop.phone),
                       ),
                   ],
                 ),
@@ -178,75 +231,22 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
             inventoryAsync.when(
               // LOADING — simple centered spinner
               loading: () => const SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(48),
-                    child: CircularProgressIndicator(),
-                  ),
-                ),
+                child: AppLoadingState(padding: EdgeInsets.all(48)),
               ),
 
               // ERROR — show user-friendly network error
               error: (e, _) => SliverToBoxAdapter(
-                child: Padding(
+                child: AppErrorState(
+                  title: 'Unable to load products',
+                  message: 'Please check your internet connection\nand try again',
                   padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: AppTheme.error.withValues(alpha: 0.08),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.wifi_off_rounded,
-                          size: 36,
-                          color: AppTheme.error.withValues(alpha: 0.6),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Unable to load products',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Please check your internet connection\nand try again',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 13,
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () => ref.invalidate(shopInventoryProvider(shop.id)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'Try Again',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  iconContainerSize: 80,
+                  iconSize: 36,
+                  titleSize: 16,
+                  centerContent: false,
+                  action: AppRetryButton(
+                    onPressed: () => ref.invalidate(shopInventoryProvider(shop.id)),
+                    expand: true,
                   ),
                 ),
               ),
@@ -255,11 +255,12 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
               data: (inventory) {
                 if (inventory.isEmpty) {
                   return const SliverToBoxAdapter(
-                    child: Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(48),
-                        child: Text('No products available yet'),
-                      ),
+                    child: AppEmptyState(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'No products available yet',
+                      message: 'This shop has not added items to its catalog yet.',
+                      padding: EdgeInsets.all(48),
+                      iconSize: 56,
                     ),
                   );
                 }
@@ -370,7 +371,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
       // Only shows if cart is not empty
       floatingActionButton: cartCount > 0
           ? FloatingActionButton.extended(
-              onPressed: () => context.push('/cart'),
+            onPressed: () => context.push(AppRoutes.cart),
               backgroundColor: AppTheme.primary,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.shopping_cart_outlined),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../profile/providers/user_provider.dart';
 
@@ -77,7 +78,7 @@ class HomeHeader extends ConsumerWidget {
               GestureDetector(
                 // GestureDetector detects taps, swipes, long presses etc
                 // onTap runs when user taps anywhere inside it
-                onTap: () => context.push('/profile'),
+                onTap: () => context.push(AppRoutes.profile),
                 child: CircleAvatar(
                   backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
                   child: const Icon(
@@ -93,7 +94,7 @@ class HomeHeader extends ConsumerWidget {
 
           // Search bar — tapping opens the search screen
           GestureDetector(
-            onTap: () => context.push('/search'),
+            onTap: () => context.push(AppRoutes.search),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(

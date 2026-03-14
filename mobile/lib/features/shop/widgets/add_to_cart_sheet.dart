@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/price_formatter.dart';
 import '../../../models/product.dart';
 import '../../../models/cart_item.dart';
 import '../../cart/providers/cart_provider.dart';
+import '../../cart/utils/cart_shop_guard.dart';
 
 class AddToCartSheet extends ConsumerStatefulWidget {
   final Product product;
@@ -124,7 +126,7 @@ class _AddToCartSheetState extends ConsumerState<AddToCartSheet> {
                             padding: const EdgeInsets.only(right: 8),
                             child: ChoiceChip(
                               label: Text(
-                                '${variant.variantName} — ₹${variant.price.toStringAsFixed(0)}',
+                                '${variant.variantName} — ${formatPrice(variant.price)}',
                               ),
                               selected: isSelected,
                               selectedColor: AppTheme.primary.withValues(alpha: 0.15),
@@ -181,7 +183,7 @@ class _AddToCartSheetState extends ConsumerState<AddToCartSheet> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: () async {
                         final item = CartItem(
                           variantId: _selectedVariant.id,
                           shopId: widget.shopId,
@@ -193,7 +195,24 @@ class _AddToCartSheetState extends ConsumerState<AddToCartSheet> {
                           quantity: _quantity,
                           imageUrl: widget.product.imageUrl,
                         );
-                        ref.read(cartProvider.notifier).addItem(item);
+
+                        final cartNotifier = ref.read(cartProvider.notifier);
+                        final result = cartNotifier.addItem(item);
+
+                        if (result.isConflict) {
+                          if (!context.mounted) return;
+                          final shouldReplace = await showReplaceCartDialog(
+                            context,
+                            currentShopName:
+                                result.currentShopName ?? 'another store',
+                            newShopName: widget.shopName,
+                          );
+
+                          if (!shouldReplace) return;
+                          cartNotifier.addItem(item, replaceExistingShop: true);
+                        }
+
+                        if (!context.mounted) return;
                         Navigator.of(context).pop();
                       },
                       style: ElevatedButton.styleFrom(
@@ -205,7 +224,7 @@ class _AddToCartSheetState extends ConsumerState<AddToCartSheet> {
                         ),
                       ),
                       child: Text(
-                        'Add to Cart — ₹${(_selectedVariant.price * _quantity).toStringAsFixed(0)}',
+                        'Add to Cart — ${formatPrice(_selectedVariant.price * _quantity)}',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,

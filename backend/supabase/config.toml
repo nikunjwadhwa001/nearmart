@@ -350,6 +350,13 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+[functions.delete-account]
+# Our function validates the JWT internally via supabaseAdmin.auth.getUser().
+# Disabling gateway-level verification prevents the Supabase edge runtime from
+# rejecting requests with newer-format anon keys (sb_publishable_...) before
+# the function code even runs.
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

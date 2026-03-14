@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/price_formatter.dart';
 import '../../../models/product.dart';
 import '../../../models/cart_item.dart';
 import '../../cart/providers/cart_provider.dart';
+import '../../cart/utils/cart_shop_guard.dart';
 
 class VariantTile extends ConsumerWidget {
   final ProductVariant variant;
@@ -25,9 +27,10 @@ class VariantTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Find this variant's quantity in cart (0 if not in cart)
     final cartItems = ref.watch(cartProvider);
-    final inCart = cartItems.where((i) => i.variantId == variant.id);
+    final inCart = cartItems.where(
+      (i) => i.shopId == shopId && i.variantId == variant.id,
+    );
     final qty = inCart.isEmpty ? 0 : inCart.first.quantity;
 
     return Container(
@@ -69,7 +72,7 @@ class VariantTile extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: Text(
-              '₹${variant.price.toStringAsFixed(0)}',
+              formatPrice(variant.price),
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -89,20 +92,33 @@ class VariantTile extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              onPressed: () {
-                ref.read(cartProvider.notifier).addItem(
-                  CartItem(
-                    variantId: variant.id,
-                    shopId: shopId,
-                    shopName: shopName,
-                    productName: productName,
-                    brandName: brandName ?? '',
-                    variantName: variant.variantName,
-                    price: variant.price,
-                    quantity: 1,
-                    imageUrl: imageUrl,
-                  ),
+              onPressed: () async {
+                final item = CartItem(
+                  variantId: variant.id,
+                  shopId: shopId,
+                  shopName: shopName,
+                  productName: productName,
+                  brandName: brandName ?? '',
+                  variantName: variant.variantName,
+                  price: variant.price,
+                  quantity: 1,
+                  imageUrl: imageUrl,
                 );
+
+                final cartNotifier = ref.read(cartProvider.notifier);
+                final result = cartNotifier.addItem(item);
+
+                if (!result.isConflict) return;
+
+                final shouldReplace = await showReplaceCartDialog(
+                  context,
+                  currentShopName: result.currentShopName ?? 'another store',
+                  newShopName: shopName,
+                );
+
+                if (!shouldReplace) return;
+
+                cartNotifier.addItem(item, replaceExistingShop: true);
               },
               child: const Text(
                 'Add',
@@ -127,6 +143,7 @@ class VariantTile extends ConsumerWidget {
                   InkWell(
                     onTap: () {
                       ref.read(cartProvider.notifier).updateQuantity(
+                        shopId,
                         variant.id,
                         qty - 1,
                       );
@@ -156,6 +173,7 @@ class VariantTile extends ConsumerWidget {
                   InkWell(
                     onTap: () {
                       ref.read(cartProvider.notifier).updateQuantity(
+                        shopId,
                         variant.id,
                         qty + 1,
                       );

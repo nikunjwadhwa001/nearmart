@@ -81,7 +81,19 @@ class AddressRepository {
   /// Delete an address by ID.
   Future<void> deleteAddress(String addressId) async {
     final userId = _supabase.auth.currentUser!.id;
-    await _supabase.from('addresses').delete().eq('id', addressId);
+
+    final deletedAddress = await _supabase
+        .from('addresses')
+        .delete()
+        .eq('id', addressId)
+        .eq('user_id', userId)
+        .select('id')
+        .maybeSingle();
+
+    if (deletedAddress == null) {
+      throw StateError('Address not found for the current user.');
+    }
+
     // Address list changed; force next read to refetch fresh data.
     await _cache.invalidate('addresses:v1:user:$userId');
   }

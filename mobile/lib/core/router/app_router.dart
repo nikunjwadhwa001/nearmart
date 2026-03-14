@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../constants/app_routes.dart';
 import '../../features/auth/screens/splash_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
@@ -13,21 +14,6 @@ import '../../features/orders/screens/order_detail_screen.dart';
 import '../../models/shop.dart';
 import '../../features/cart/screens/cart_screen.dart';
 import '../../features/search/screens/search_screen.dart';
-
-// All route paths as constants
-// Never type '/login' as a raw string anywhere else in the app
-// Always use AppRoutes.login — typos become compile errors
-class AppRoutes {
-  static const splash = '/';
-  static const login = '/login';
-  static const otp = '/otp';
-  static const home = '/home';
-  static const shopDetail = '/shop';
-  static const profile = '/profile';
-  static const cart = '/cart';
-  static const orders = '/orders';
-  static const search = '/search';
-}
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -84,7 +70,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   builder: (context, state) => const CartScreen(),
 ),
       GoRoute(
-        path: '/shop/:shopId',
+        path: AppRoutes.shopDetailPattern,
         builder: (context, state) {
           // state.extra carries the full Shop object
           // passed from ShopCard when user taps it
@@ -97,7 +83,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ProfileScreen(),
       ),
       GoRoute(
-        path: '/order-confirmation/:orderId',
+        path: AppRoutes.orderConfirmationPattern,
         builder: (context, state) {
           final orderId = state.pathParameters['orderId']!;
           return OrderConfirmationScreen(orderId: orderId);
@@ -112,7 +98,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SearchScreen(),
       ),
       GoRoute(
-        path: '/order/:orderId',
+        path: AppRoutes.orderDetailPattern,
         builder: (context, state) {
           final orderId = state.pathParameters['orderId']!;
           return OrderDetailScreen(orderId: orderId);

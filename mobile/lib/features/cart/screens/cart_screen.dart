@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_routes.dart';
+import '../../../core/utils/app_snackbar.dart';
+import '../../../core/utils/price_formatter.dart';
+import '../../../core/widgets/app_dialogs.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/cart_item.dart';
 import '../../address/widgets/address_selection_sheet.dart';
@@ -15,12 +19,57 @@ class CartScreen extends ConsumerWidget {
     // Watch the full cart list — rebuilds when any item changes
     final cartItems = ref.watch(cartProvider);
     final cartTotal = ref.watch(cartTotalProvider);
+    final shopName = ref.watch(cartShopNameProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
         backgroundColor: AppTheme.surface,
         title: const Text('My Cart'),
+        actions: [
+          if (shopName != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 190),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.storefront_outlined,
+                          size: 14,
+                          color: AppTheme.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            shopName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
         // Shows how many unique items are in cart
         // e.g. "My Cart (3 items)"
         bottom: PreferredSize(
@@ -72,7 +121,7 @@ class CartScreen extends ConsumerWidget {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () => context.go('/home'),
+                        onPressed: () => context.go(AppRoutes.home),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.primary,
                           foregroundColor: Colors.white,
@@ -179,7 +228,7 @@ class CartItemCard extends ConsumerWidget {
                 const SizedBox(height: 4),
                 // Price per unit
                 Text(
-                  '₹${item.price.toStringAsFixed(0)} each',
+                  '${formatPrice(item.price)} each',
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppTheme.textSecondary,
@@ -195,7 +244,7 @@ class CartItemCard extends ConsumerWidget {
             children: [
               // Line total — price × quantity
               Text(
-                '₹${item.total.toStringAsFixed(0)}',
+                formatPrice(item.total),
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 15,
@@ -220,12 +269,16 @@ class CartItemCard extends ConsumerWidget {
                         // Remove item completely
                         ref
                             .read(cartProvider.notifier)
-                            .removeItem(item.variantId);
+                            .removeItem(item.shopId, item.variantId);
                       } else {
                         // Decrease quantity by 1
                         ref
                             .read(cartProvider.notifier)
-                            .updateQuantity(item.variantId, item.quantity - 1);
+                            .updateQuantity(
+                              item.shopId,
+                              item.variantId,
+                              item.quantity - 1,
+                            );
                       }
                     },
                   ),
@@ -249,7 +302,11 @@ class CartItemCard extends ConsumerWidget {
                     onTap: () {
                       ref
                           .read(cartProvider.notifier)
-                          .updateQuantity(item.variantId, item.quantity + 1);
+                          .updateQuantity(
+                            item.shopId,
+                            item.variantId,
+                            item.quantity + 1,
+                          );
                     },
                   ),
                 ],
@@ -283,11 +340,7 @@ class _OrderSummary extends ConsumerWidget {
 
     // Show loading
     if (!context.mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
+    showAppLoadingDialog(context, message: 'Placing your order...');
 
     try {
       final repo = OrderRepository();
@@ -305,19 +358,16 @@ class _OrderSummary extends ConsumerWidget {
 
       // Navigate to order confirmation
       if (context.mounted) {
-        context.go('/order-confirmation/$orderId');
+        context.go(AppRoutes.orderConfirmation(orderId));
       }
     } catch (e) {
       // Close loading dialog
       if (context.mounted) Navigator.pop(context);
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Unable to place order. Please check your connection and try again.'),
-            backgroundColor: AppTheme.error,
-            duration: Duration(seconds: 4),
-          ),
+        showAppErrorSnackBar(
+          context,
+          'Unable to place order. Please check your connection and try again.',
         );
       }
     }
@@ -345,7 +395,7 @@ class _OrderSummary extends ConsumerWidget {
           // Customer only sees what they pay — clean and simple
           _SummaryRow(
             label: 'Total',
-            value: '₹${total.toStringAsFixed(0)}',
+            value: formatPrice(total),
             isBold: true,
           ),
 

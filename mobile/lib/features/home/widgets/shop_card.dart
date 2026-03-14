@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
+import '../../../core/constants/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/shop.dart';
 
@@ -39,7 +40,7 @@ class ShopCard extends StatelessWidget {
             // back button will return customer to home
             // state.extra passes the full Shop object to the detail screen
             // so we don't need to fetch it again
-            context.push('/shop/${shop.id}', extra: shop);
+            context.push(AppRoutes.shopDetail(shop.id), extra: shop);
           },
           child: Padding(
             padding: const EdgeInsets.all(12),

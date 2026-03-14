@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/form_validators.dart';
+import '../../../core/widgets/near_mart_logo.dart';
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -15,43 +18,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-
-  // Common email domain typos → correct domain
-  static const _domainTypos = {
-    'gnail.com': 'gmail.com',
-    'gmial.com': 'gmail.com',
-    'gmal.com': 'gmail.com',
-    'gmai.com': 'gmail.com',
-    'gamil.com': 'gmail.com',
-    'gmail.co': 'gmail.com',
-    'gmail.con': 'gmail.com',
-    'gmaill.com': 'gmail.com',
-    'yaho.com': 'yahoo.com',
-    'yahooo.com': 'yahoo.com',
-    'yahoo.con': 'yahoo.com',
-    'yhaoo.com': 'yahoo.com',
-    'hotmal.com': 'hotmail.com',
-    'hotmai.com': 'hotmail.com',
-    'hotmail.con': 'hotmail.com',
-    'outlok.com': 'outlook.com',
-    'outloo.com': 'outlook.com',
-    'outlook.con': 'outlook.com',
-    'iclud.com': 'icloud.com',
-    'icoud.com': 'icloud.com',
-    'icloud.con': 'icloud.com',
-  };
-
-  /// Returns a typo suggestion if the domain looks like a common misspelling
-  String? _checkDomainTypo(String email) {
-    final parts = email.split('@');
-    if (parts.length != 2) return null;
-    final domain = parts[1].toLowerCase();
-    final correctDomain = _domainTypos[domain];
-    if (correctDomain != null) {
-      return '${parts[0]}@$correctDomain';
-    }
-    return null;
-  }
 
   @override
   void dispose() {
@@ -67,7 +33,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // Listen for OTP sent — navigate to OTP screen
     ref.listen<AuthState>(authNotifierProvider, (previous, next) {
       if (next.otpSent && !(previous?.otpSent ?? false)) {
-        context.go('/otp', extra: {
+        context.go(AppRoutes.otp, extra: {
           'email': _emailController.text.trim(),
           'name': _nameController.text.trim(),
         });
@@ -91,26 +57,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: Column(
                     children: [
                       // App icon — styled to match actual icon design
-                      Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary,
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.primary.withValues(alpha:0.3),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.shopping_basket_rounded,
-                          color: Colors.white,
-                          size: 50,
-                        ),
-                      ),
+                      const NearMartLogoTile(),
                       const SizedBox(height: 16),
                       Text(
                         'NearMart',
@@ -165,15 +112,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     helperText: 'Optional — you can update this later',
                     prefixIcon: Icon(Icons.person_outline),
                   ),
-                  validator: (value) {
-                    // Name is optional - only validate if user entered something
-                    if (value != null && value.trim().isNotEmpty) {
-                      if (value.trim().length < 2) {
-                        return 'Name must be at least 2 characters';
-                      }
-                    }
-                    return null;
-                  },
+                  validator: AppFormValidators.optionalFullName,
                 ),
 
                 const SizedBox(height: 16),
@@ -188,24 +127,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     hintText: 'you@example.com',
                     prefixIcon: Icon(Icons.email_outlined),
                   ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter your email';
-                    }
-                    // Proper email validation regex
-                    final emailRegex = RegExp(
-                      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
-                    );
-                    if (!emailRegex.hasMatch(value.trim())) {
-                      return 'Please enter a valid email address';
-                    }
-                    // Check for common domain typos
-                    final suggestion = _checkDomainTypo(value.trim());
-                    if (suggestion != null) {
-                      return 'Did you mean $suggestion?';
-                    }
-                    return null;
-                  },
+                  validator: AppFormValidators.emailWithTypoSuggestion,
                 ),
 
                 const SizedBox(height: 24),

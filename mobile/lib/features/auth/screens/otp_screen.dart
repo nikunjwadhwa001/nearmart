@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_snackbar.dart';
 import '../providers/auth_provider.dart';
 import '../../profile/providers/user_provider.dart';
 
@@ -31,7 +34,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
   Future<void> _verifyOtp() async {
     final otp = _controller.text;
-    if (otp.length != 6) return;
+    if (otp.length != AppLimits.otpLength) return;
 
     setState(() {
       _isVerifying = true;
@@ -50,18 +53,18 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     if (error == null) {
       // Invalidate user profile to force fresh fetch
       ref.invalidate(userProfileProvider);
-      context.go('/home');
+      context.go(AppRoutes.home);
     } else {
       // Map technical errors to user-friendly messages
       String friendlyError;
       if (error.toLowerCase().contains('expired') ||
           error.toLowerCase().contains('invalid')) {
-        friendlyError = 'This code has expired or is incorrect. Please tap "Resend OTP" to get a new code.';
+        friendlyError = AppMessages.otpExpiredOrIncorrect;
       } else if (error.toLowerCase().contains('network') ||
           error.toLowerCase().contains('connection')) {
-        friendlyError = 'Please check your internet connection and try again.';
+        friendlyError = AppMessages.networkTryAgain;
       } else {
-        friendlyError = 'Something went wrong. Please try again or request a new code.';
+        friendlyError = AppMessages.otpVerificationFallback;
       }
       setState(() {
         _isVerifying = false;
@@ -80,7 +83,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         backgroundColor: AppTheme.background,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/login'),
+          onPressed: () => context.go(AppRoutes.login),
         ),
       ),
       body: SafeArea(
@@ -126,11 +129,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                           focusNode: _focusNode,
                           autofocus: true,
                           keyboardType: TextInputType.number,
-                          maxLength: 6,
+                          maxLength: AppLimits.otpLength,
                           readOnly: _isVerifying,
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(6),
+                            LengthLimitingTextInputFormatter(AppLimits.otpLength),
                           ],
                           decoration: const InputDecoration(
                             counterText: '',
@@ -140,7 +143,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                             // Rebuild the visual boxes
                             setState(() {});
                             // Auto-submit when 6 digits entered
-                            if (value.length == 6 && !_isVerifying) {
+                            if (value.length == AppLimits.otpLength && !_isVerifying) {
                               _verifyOtp();
                             }
                           },
@@ -152,7 +155,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                     IgnorePointer(
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: List.generate(6, (index) {
+                        children: List.generate(AppLimits.otpLength, (index) {
                           final text = _controller.text;
                           final hasDigit = index < text.length;
                           final isActive = index == text.length;
@@ -242,12 +245,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                           ref
                               .read(authNotifierProvider.notifier)
                               .sendOtp(widget.email, widget.name);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content:  Text('OTP resent!'),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
+                          showAppInfoSnackBar(context, 'OTP resent!');
                         },
                   child: const Text(
                     'Resend OTP',

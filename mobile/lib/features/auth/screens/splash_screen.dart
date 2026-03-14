@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/near_mart_logo.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,7 +17,7 @@ class _SplashScreenState extends State<SplashScreen> {
     super.initState();
     // Navigate after 2 seconds — router redirect handles auth check
     Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) context.go('/login');
+      if (mounted) context.go(AppRoutes.login);
     });
   }
 
@@ -27,8 +29,7 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.shopping_basket_rounded,
-                size: 72, color: Colors.white),
+            const NearMartLogoMark(iconSize: 72, iconColor: Colors.white),
             const SizedBox(height: 16),
             Text(
               'NearMart',
